@@ -1,0 +1,102 @@
+/* Query 1 - Create a query that lists each movie, the film category it is classified in, and the number of times it has been rented out. */ 
+
+SELECT name, sum(rental_count)
+FROM(
+	SELECT f.title,
+	c.name,
+	COUNT(r.rental_id) AS rental_count
+	FROM category AS c
+	JOIN film_category AS fc
+	ON c.category_id = fc.category_id
+	AND c.name IN ('Animation', 'Children', 'Classics', 'Family', 'Music')
+	JOIN film AS f
+	ON f.film_id = fc.film_id
+	JOIN inventory AS i
+	ON f.film_id = fc.film_id
+	JOIN rental AS r
+	ON i.inventory_id = r.inventory_id
+	GROUP BY 1, 2
+	ORDER BY 2, 1) AS tt
+GROUP BY 1
+ORDER BY 2 DESC;
+
+
+
+
+/* Query 2 - Which are the most profitable film genre? */
+
+SELECT c.name AS category, SUM(p.amount) AS total_amount, COUNT(r.rental_id) AS rentals, SUM(p.amount) / COUNT(r.rental_id) AS amount_per_rental
+FROM category AS c
+JOIN film_category AS fc
+ON c.category_id = fc.category_id
+JOIN film AS f
+ON fc.film_id = f.film_id
+JOIN inventory AS i
+ON f.film_id = i.film_id
+JOIN rental AS r
+ON i.inventory_id = r.inventory_id
+JOIN payment AS p
+ON r.rental_id = p.rental_id
+GROUP BY 1
+ORDER BY 2 DESC
+
+
+
+
+
+/* Query 3 - provide a table with the family-friendly film category, each of the quartiles, and the corresponding count of movies within each combination of film category for each corresponding rental duration category.*/
+
+
+SELECT
+  category_name,
+  quartiles,
+  COUNT(category_name)
+FROM (SELECT
+  	c.name category_name,
+ 	NTILE(4) OVER (ORDER BY f.rental_duration) AS quartiles
+	FROM film f
+	JOIN film_category fc
+  	ON f.film_id = fc.film_id
+	JOIN category c
+ 	ON c.category_id = fc.category_id
+	WHERE c.name IN ('Animation', 'Children', 'Classics', 'Comedy', 'Family', 	'Music')) t1
+GROUP BY 1,2
+ORDER BY 1,2;
+
+
+
+
+
+
+/* Query 4 - write a query to capture the customer name, month and year of payment, and total payment amount for each month by these top 10 paying customers? */
+
+WITH results AS 
+	(SELECT DATE_TRUNC('month',p.payment_date) AS pay_mon,
+     		c.first_name || ' ' || c.last_name AS full_name, 
+		COUNT(*) AS pay_counterpermon, 
+		SUM(p.amount) AS pay_amount
+        FROM PAYMENT AS p
+        JOIN CUSTOMER AS c
+        ON p.customer_id = c.customer_id
+        WHERE DATE_TRUNC('month',p. payment_date) > '2007-01-01'
+        GROUP BY 1,2
+        ORDER BY full_name),
+		top as (SELECT c.first_name || ' ' || c.last_name AS full_name,
+       		SUM(p.amount) AS pay_amount
+        	FROM PAYMENT AS p
+        	JOIN CUSTOMER AS c
+       	 	ON p.customer_id = c.customer_id
+        	GROUP BY 1
+        	ORDER BY pay_amount DESC
+        	LIMIT 10),
+
+        t1 AS (SELECT r.pay_mon, r.full_name, r.pay_counterpermon, r.pay_amount
+                  FROM results AS r
+                  JOIN top AS t
+                  ON r.full_name = t.full_name
+                  ORDER BY full_name, pay_mon)
+
+SELECT *,
+pay_amount - LAG(pay_amount) OVER (ORDER BY full_name) AS difference,
+LAG(pay_amount) OVER (ORDER BY full_name) AS lag_collumn
+FROM t1;
